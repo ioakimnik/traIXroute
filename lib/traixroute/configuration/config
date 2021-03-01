@@ -1,7 +1,7 @@
 {
     "peering":{"ix_link":"https://peeringdb.com/api/ix","ixp_pfx_link":"https://peeringdb.com/api/ixpfx","ixplan_link":"https://peeringdb.com/api/ixlan","netixlan_link":"https://peeringdb.com/api/netixlan"},
-    "pch":{"ixp_exchange":"https://www.pch.net/api/ixp/directory?format=csv","ixp_ips":"https://www.pch.net/api/ixp/subnet_details/","ixp_subnet":"https://www.pch.net/api/ixp/subnets/"},
+    "pch":{"ixp_exchange":"https://www.pch.net/api/ixp/directory","ixp_ips":"https://www.pch.net/api/ixp/subnet_details/","ixp_subnet":"https://www.pch.net/api/ixp/subnets/"},
     "caida_log":"http://data.caida.org/datasets/routing/routeviews-prefix2as/pfx2as-creation.log",
-    "ripe_auth_key":"",
+    "ripe_auth_key":"4292cf8c-df9e-407f-98a0-2796e4124a31",
     "num_of_cores":-1
 }
