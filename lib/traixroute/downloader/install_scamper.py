@@ -27,7 +27,7 @@ from urllib.request import urlretrieve
 
 def main():
     mypath = os.path.expanduser("~")
-    version = 'scamper-cvs-20141211g'
+    version = 'scamper-cvs-20200923'
 
     #--------------------SCAMPER---------------------------
     # Download Scamper
@@ -35,8 +35,9 @@ def main():
         urlretrieve(
             'https://www.caida.org/tools/measurement/scamper/code/'+version+'.tar.gz', mypath + '/scamper.tar')
         print('Scamper has been downloaded successfully.')
-    except:
+    except Exception as e:
         print('Scamper has not been downloaded. Exiting.')
+        print(e)
         sys.exit(0)
 
     # Untar Scamper
