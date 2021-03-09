@@ -21,6 +21,7 @@
 # along with traIXroute.  If not, see <http://www.gnu.org/licenses/>.
 
 from urllib.request import urlretrieve, urlopen
+from traixroute.handler import handle_json
 import shutil
 import ujson
 import os
@@ -53,6 +54,7 @@ class download_files():
         self.ixp_exchange = 'https://www.pch.net/api/ixp/directory'
         self.ixp_ip = config["pch"]["ixp_ips"]
         self.ixp_subnet = config["pch"]["ixp_subnet"]
+        self.pch_threads = 20 #number of threads for pch files download
         self.caida_log = config["caida_log"]
 
         self.homepath = destination_path
@@ -136,7 +138,7 @@ class download_files():
                 with open(self.homepath + '/database/PDB/ixlan.json', 'w') as f:
                     ujson.dump(obj, f)
         except Exception as e:
-            print(str(e))
+            print('PDB exception:' + str(e))
             print('PDB dataset cannot be updated.')
             return False
         print('PDB dataset has been updated successfully.')
@@ -153,58 +155,64 @@ class download_files():
 
         print('Started downloading PCH dataset.')
         try:
-
-            #add option to download only needed files?
+            json_handle_local = handle_json.handle_json()
+            # add option to download only needed files?
             request = self.ixp_exchange
             print(self.ixp_exchange)
             response = urlopen(request)
             str_response = response.read().decode('utf-8')
             obj = ujson.loads(str_response)
 
-            #urlretrieve(self.ixp_exchange, self.homepath + '/database/PCH/ixp_exchange.json')
+            # urlretrieve(self.ixp_exchange, self.homepath + '/database/PCH/ixp_exchange.json')
             print("IXP Exchange downloaded")
-            with open(self.homepath + '/database/PCH/ixp_exchange.json', 'w') as f:
-                ujson.dump(obj, f)
 
-            #testing without download:
-            #with open("ixp_exchange.json") as f:
+            json_handle_local.export_IXP_dict(obj, self.homepath + '/database/PCH/ixp_exchange.json')
+
+
+            # testing without download:
+            # with open("ixp_exchange.json") as f:
             #    obj = ujson.load(f)
-            
+
             active_ixps = {}
             subnet_urls = []
             membership_urls = []
-
-            for item in obj:
-                if item['stat'] == 'Planned' or item['stat'] == 'Active':
-                    active_ixps[item['id']] = item
-                    subnet_urls.append(self.ixp_subnet + item['id'])
-                    membership_urls.append(self.ixp_ip + item['id'])
-            #with open('test_file.json', 'w') as f:
-                #ujson.dump(active_ixps, f)
+            ixp_ids = []
 
             if not os.path.exists(self.homepath + '/database/PCH/temp_files'):
                 os.mkdir(self.homepath + '/database/PCH/temp_files')
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-                subnets = executor.map(self.get_subnet, subnet_urls)
-                memberships = executor.map(self.get_membership, membership_urls)
+            for ixp in obj:
+                if ixp['stat'] == 'Planned' or ixp['stat'] == 'Active':
+                    active_ixps[ixp['id']] = ixp
+                    if not os.path.exists(self.homepath + '/database/PCH/temp_files/subnet_' + str(ixp['id']) + '.json')\
+                            or not os.path.exists(self.homepath + '/database/PCH/temp_files/membership_' + str(ixp['id']) + '.json'):
+                        subnet_urls.append(self.ixp_subnet + ixp['id'])
+                        membership_urls.append(self.ixp_ip + ixp['id'])
+                        ixp_ids.append(ixp['id'])
+                    else:
+                        print('File for IXP id ' + str(ixp['id']) + ' already downloaded')
+            #with open(self.homepath + '/database/PCH/temp_files/test_file.json', 'w') as f:
+            #    ujson.dump(active_ixps, f)
+
+
+
+            if len(ixp_ids) > 0:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self.pch_threads) as executor:
+                    result = executor.map(self.get_files, ixp_ids)
 
             subnet_dict = {}
             membership_dict = {}
 
-            for item in active_ixps:
-                with open(self.homepath + '/database/PCH/temp_files/subnet_' + str(item['id']) + '.json')as f:
-                    subnet_dict[item['id']] = ujson.load(f)
-            for item in active_ixps:
-                with open(self.homepath + '/database/PCH/temp_files/membership_' + str(item['id']) + '.json') as f:
-                    membership_dict[item['id']] = ujson.load(f)
+            for ixp in active_ixps:
+                #print(item)
+                ixp_id = active_ixps[ixp]['id']
+                [subnet_dict[ixp_id], sub_flag] = json_handle_local.import_IXP_dict(self.homepath +
+                                                        '/database/PCH/temp_files/subnet_' + str(ixp_id) + '.json')
+                [membership_dict[ixp_id], mem_flag] = json_handle_local.import_IXP_dict(self.homepath +
+                                                        '/database/PCH/temp_files/membership_' + str(ixp_id) + '.json')
 
-            with open(self.homepath + '/database/PCH/ixp_subnets.json', 'w') as f:
-                ujson.dump(subnet_dict)
-            with open(self.homepath + '/database/PCH/ixp_membership.json', 'w') as f:
-                ujson.dump(membership_dict)
-
-
+            json_handle_local.export_IXP_dict(subnet_dict, self.homepath + '/database/PCH/ixp_subnets.json')
+            json_handle_local.export_IXP_dict(membership_dict, self.homepath + '/database/PCH/ixp_membership.json')
 
             print('All tasks completed')
 
@@ -212,28 +220,23 @@ class download_files():
             #shutil.rmtree(path + '/temp_files')
 
         except Exception as e:
-            print(str(e))
+            print('PCH exception' + str(e))
+            print('PCH dataset cannot be updated')
+            return False
         print('PCH dataset has been updated successfully.')
 
         return True
 
-    def get_subnet(self, subnet_url):
+    def get_files(self, ixp_id):
         try:
-            subnet_no = re.findall("\d+", subnet_url)[0]
-            urlretrieve(subnet_url, self.homepath + '/database/PCH/temp_files/subnet_' + str(subnet_no) + '.json')
-            print('Requested URL: ' + subnet_url)
+            urlretrieve(self.ixp_subnet + str(ixp_id),
+                        self.homepath + '/database/PCH/temp_files/subnet_' + str(ixp_id) + '.json')
+            print('Requested URL: ' + self.ixp_subnet + str(ixp_id))
+            urlretrieve(self.ixp_ip + str(ixp_id),
+                        self.homepath + '/database/PCH/temp_files/membership_' + str(ixp_id) + '.json')
+            print('Requested URL: ' + self.ixp_ip + str(ixp_id))
         except Exception as e:
-            print('ERROR with URL: ' + subnet_url)
-            print(str(e))
-        return True
-
-    def get_membership(self, membership_url):
-        try:
-            membership_no = re.findall("\d+", membership_url)[0]
-            urlretrieve(membership_url, self.homepath + '/database/PCH/temp_files/membership_' + str(membership_no) + '.json')
-            print('Requested URL: ' + membership_url)
-        except Exception as e:
-            print('ERROR with URL: ' + membership_url)
+            print('ERROR with IXP: ' + ixp_id)
             print(str(e))
         return True
 
