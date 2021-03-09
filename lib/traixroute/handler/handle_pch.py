@@ -20,7 +20,7 @@
 # You should have received a copy of the GNU General Public License
 # along with traIXroute.  If not, see <http://www.gnu.org/licenses/>.
 
-from traixroute.handler import dict_merger
+from traixroute.handler import dict_merger, handle_json
 from traixroute.controller import string_handler
 from collections import defaultdict
 from traixroute.downloader import download_files
@@ -118,6 +118,31 @@ class pch_handle():
         doc.close()
         return ixpip2asn
 
+    def pch_handle_ixpm2(self, reserved_tree, add_info_tree):
+        '''
+        Extracts the IXP IPs from PCH.
+        Input:
+            a) filename: The ixp_membership.csv file.
+            b) self.homepath: The directory path of the database.
+            c) reserved_tree: The SubnetTree containing the reserved Subnets.
+            d) add_info_tree: The SubnetTree containing user imported IXP prefixes.
+        Output:
+            a) ixpip2asn: A dictionary with {IXP IP}=[ASN].
+        '''
+        filename = self.file_opener(self.filename_ixp_membership, 3)
+        tree = SubnetTree.SubnetTree()
+        ixpip2asn = {}
+        sub_to_ixp = {}
+        hstring = string_handler.string_handler()
+        dumped_ixps = []
+
+        for ixp_id in filename:
+            if 'error' not in ixp_id:
+                ip = hstring.extract_ip(ixp_id['IPv4'])
+
+
+
+
     def pch_handle_sub(self, reserved_tree, long_mem, IXP_region):
         '''
         Extracts the IXP keys-to-Subnets from the ixp_subnets.csv file.
@@ -208,6 +233,8 @@ class pch_handle():
         '''
 
         handle_string = string_handler.string_handler()
+        json_handle_local = handle_json.handle_json()
+
         doc = self.file_opener(self.filename_excha, 2)
         ixpip2long = {}
         IXP_region = {}
@@ -233,7 +260,39 @@ class pch_handle():
                         IXP_region[temp_string[0]] = country, city
 
         doc.close()
+        json_handle_local.export_IXP_dict(IXP_region, self.homepath + '/database/PCH/IXP_region.json')
+        json_handle_local.export_IXP_dict(ixpip2long, self.homepath + '/database/PCH/ixpip2long.json')
         return (ixpip2long, IXP_region)
+
+    def pch_handle_long2(self, country2cc):
+        '''
+        Returns a dictionary with the IXP long names.
+        Input:
+            a) filename: The ixp_exchange.json file.
+            b) self.homepath: The directory path of the database.
+            c) country2cc: Dictionary that contains country names to country codes.
+        Output:
+            a) ixpip2long: A dictionary with {keyid}=[IXP long name].
+            b) IXP_region: A dictionary with {keyid}=[IXP country, IXP city].
+        '''
+        handled_string = string_handler.string_handler()
+        filename = self.file_opener(self.filename_excha, 2)
+        ixpip2long = {}
+        IXP_region = {}
+
+        for ixp_id in filename:
+            if ixp_id['stat'] == 'Planned' or ixp_id['stat'] == 'Active':
+                ixpip2long[ixp_id['id']] = ixp_id['name']
+                country = handled_string.format_country_city('cit')
+                city = handled_string.format_country_city('ctry')
+                try:
+                    IXP_region[ixp_id['id']] = country2cc[country], city
+                except KeyError:
+                    print('Warning, update your CCs for: ', country)
+                    IXP_region[ixp_id['id']] = country, city
+
+        file_name.close()
+        return ixpip2long, IXP_region
 
     def file_opener(self, filename, option):
         '''
@@ -247,7 +306,7 @@ class pch_handle():
         '''
 
         try:
-            doc = open(self.homepath + '/database' + filename + '.csv')
+            doc = open(self.homepath + '/database' + filename + '.json')
         except:
             print(filename + ' was not found.')
             if not self.downloader.download_pch(option):
@@ -255,12 +314,12 @@ class pch_handle():
                       ". Copying from the default database.")
                 try:
                     copyfile(self.libpath + '/database/Default' + filename +
-                             '.csv', self.homepath + '/database' + filename + '.csv')
+                             '.json', self.homepath + '/database' + filename + '.json')
                 except:
                     print('Could not copy ' + filename +
                           'from the default database.')
             try:
-                doc = open(self.homepath + '/database' + filename + '.csv')
+                doc = open(self.homepath + '/database' + filename + '.json')
             except:
                 print('Could not open ' + filename + '. Exiting.')
                 sys.exit(0)
